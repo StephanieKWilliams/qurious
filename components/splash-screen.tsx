@@ -36,7 +36,7 @@ export default function SplashScreen() {
           transition={{ delay: 0.3, duration: 0.8 }}
           className="text-4xl md:text-6xl font-bold text-white mb-4"
         >
-          AI Chat
+        Qurious
         </motion.h1>
 
         <motion.p

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Send, History, Trash2, User, Loader2, Zap } from "lucide-react"
@@ -44,10 +43,24 @@ export default function ChatInterface() {
   }, [messages])
 
   useEffect(() => {
-    // Load query history from localStorage
-    const savedHistory = localStorage.getItem("queryHistory")
-    if (savedHistory) {
-      setQueryHistory(JSON.parse(savedHistory))
+    // Load query history from localStorage safely
+    try {
+      const savedHistory = localStorage.getItem("queryHistory")
+      if (savedHistory) {
+        const parsedHistory = JSON.parse(savedHistory)
+        // Validate the parsed data
+        if (Array.isArray(parsedHistory)) {
+          setQueryHistory(
+            parsedHistory.map((item) => ({
+              ...item,
+              timestamp: new Date(item.timestamp),
+            })),
+          )
+        }
+      }
+    } catch (error) {
+      console.error("Error loading query history:", error)
+      localStorage.removeItem("queryHistory") // Clear corrupted data
     }
 
     // Set backend URL from environment or default
@@ -56,15 +69,19 @@ export default function ChatInterface() {
   }, [])
 
   const saveToHistory = (query: string, response: string) => {
-    const newHistoryItem: QueryHistory = {
-      id: Date.now().toString(),
-      query,
-      response,
-      timestamp: new Date(),
+    try {
+      const newHistoryItem: QueryHistory = {
+        id: Date.now().toString(),
+        query,
+        response,
+        timestamp: new Date(),
+      }
+      const updatedHistory = [newHistoryItem, ...queryHistory].slice(0, 50) // Keep last 50 queries
+      setQueryHistory(updatedHistory)
+      localStorage.setItem("queryHistory", JSON.stringify(updatedHistory))
+    } catch (error) {
+      console.error("Error saving to history:", error)
     }
-    const updatedHistory = [newHistoryItem, ...queryHistory].slice(0, 50) // Keep last 50 queries
-    setQueryHistory(updatedHistory)
-    localStorage.setItem("queryHistory", JSON.stringify(updatedHistory))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,7 +117,7 @@ export default function ChatInterface() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: "Unknown error" }))
         throw new Error(errorData.detail || "Failed to get response from backend")
       }
 
@@ -108,7 +125,7 @@ export default function ChatInterface() {
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: data.response,
+        content: data.response || "No response received",
         role: "assistant",
         timestamp: new Date(),
       }
@@ -117,46 +134,65 @@ export default function ChatInterface() {
       saveToHistory(userMessage.content, assistantMessage.content)
 
       // Show success toast with model info
-      toast({
-        title: "Response Generated",
-        description: `Model: ${data.model} | Tokens: ${data.tokens_used || "N/A"}`,
-      })
-    } catch (error: any) {
-      console.error("Chat error:", error)
-
-      // Handle specific error cases
-      let errorMessage = "Failed to get response. Please try again."
-
-      if (error.message.includes("fetch")) {
-        errorMessage = "Cannot connect to backend server. Please ensure the FastAPI server is running on " + backendUrl
-      } else if (error.message.includes("API key")) {
-        errorMessage = "API key not configured. Please check your backend environment variables."
-      } else if (error.message.includes("Rate limit")) {
-        errorMessage = "Rate limit exceeded. Please wait a moment before trying again."
+      if (toast) {
+        toast({
+          title: "Response Generated",
+          description: `Model: ${data.model || "Unknown"} | Tokens: ${data.tokens_used || "N/A"}`,
+        })
       }
+    }  catch (error: unknown) {
+  if (error instanceof Error) {
+    console.error("Chat error:", error);
 
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      })
+    // Handle specific error cases
+    let errorMessage = "Failed to get response. Please try again.";
+
+    if (error.message?.includes("fetch") || error.name === "TypeError") {
+      errorMessage = `Cannot connect to backend server. Please ensure the FastAPI server is running on ${backendUrl}`;
+    } else if (error.message?.includes("API key")) {
+      errorMessage = "API key not configured. Please check your backend environment variables.";
+    } else if (error.message?.includes("Rate limit")) {
+      errorMessage = "Rate limit exceeded. Please wait a moment before trying again.";
+    }
+
+    // Optionally show error toast
+    toast?.({
+      title: "Error",
+      description: errorMessage,
+      variant: "destructive",
+    });
+  } else {
+    console.error("Unknown error type:", error);
+  }
+
+
     } finally {
       setIsLoading(false)
     }
   }
 
   const clearHistory = () => {
-    setQueryHistory([])
-    localStorage.removeItem("queryHistory")
-    toast({
-      title: "History Cleared",
-      description: "Query history has been cleared.",
-    })
+    try {
+      setQueryHistory([])
+      localStorage.removeItem("queryHistory")
+      if (toast) {
+        toast({
+          title: "History Cleared",
+          description: "Query history has been cleared.",
+        })
+      }
+    } catch (error) {
+      console.error("Error clearing history:", error)
+    }
   }
 
   const loadHistoryItem = (item: QueryHistory) => {
-    setInput(item.query)
-    setShowHistory(false)
+    try {
+      setInput(item.query)
+      setShowHistory(false)
+    } catch (error) {
+      console.error("Error loading history item:", error)
+    }
   }
 
   const testBackendConnection = async () => {
@@ -164,19 +200,24 @@ export default function ChatInterface() {
       const response = await fetch(`${backendUrl}/health`)
       if (response.ok) {
         const data = await response.json()
-        toast({
-          title: "Backend Connected",
-          description: `Status: ${data.status} | Model: ${data.model}`,
-        })
+        if (toast) {
+          toast({
+            title: "Backend Connected",
+            description: `Status: ${data.status || "Unknown"} | Model: ${data.model || "Unknown"}`,
+          })
+        }
       } else {
         throw new Error("Backend not responding")
       }
     } catch (error) {
-      toast({
-        title: "Backend Connection Failed",
-        description: `Cannot connect to ${backendUrl}. Please ensure FastAPI server is running.`,
-        variant: "destructive",
-      })
+      console.error("Backend connection test failed:", error)
+      if (toast) {
+        toast({
+          title: "Backend Connection Failed",
+          description: `Cannot connect to ${backendUrl}. Please ensure FastAPI server is running.`,
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -196,7 +237,7 @@ export default function ChatInterface() {
                 <Zap className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Groq AI</h1>
+                <h1 className="text-xl font-bold text-white">Qurious</h1>
                 <p className="text-sm text-blue-200">Lightning-Fast AI Inference</p>
               </div>
             </div>
@@ -229,6 +270,7 @@ export default function ChatInterface() {
               <AnimatePresence>
                 {messages.length === 0 && (
                   <motion.div
+                    key="welcome"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center py-12"
@@ -236,8 +278,10 @@ export default function ChatInterface() {
                     <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
                       <Zap className="w-8 h-8 text-white" />
                     </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">Welcome to Groq AI</h2>
-                    <p className="text-blue-200 mb-4">Experience ultra-fast AI inference with Groq's LPU technology</p>
+                    <h2 className="text-2xl font-bold text-white mb-2">Welcome to Qurious</h2>
+                    <p className="text-blue-200 mb-4">
+                      Experience ultra-fast AI inference with Groq&apos;s LPU technology
+                    </p>
                     <div className="text-sm text-gray-400 space-y-1">
                       <p>• Lightning-fast response times</p>
                       <p>• Powered by Llama 3.1 models</p>
@@ -256,7 +300,9 @@ export default function ChatInterface() {
                     className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`flex max-w-[80%] ${message.role === "user" ? "flex-row-reverse" : "flex-row"} items-start space-x-3`}
+                      className={`flex max-w-[80%] ${
+                        message.role === "user" ? "flex-row-reverse" : "flex-row"
+                      } items-start space-x-3`}
                     >
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -279,7 +325,9 @@ export default function ChatInterface() {
                         }`}
                       >
                         <p className="whitespace-pre-wrap">{message.content}</p>
-                        <p className="text-xs opacity-70 mt-2">{message.timestamp.toLocaleTimeString()}</p>
+                        <p className="text-xs opacity-70 mt-2">
+                          {message.timestamp?.toLocaleTimeString?.() || "Unknown time"}
+                        </p>
                       </Card>
                     </div>
                   </motion.div>
@@ -287,6 +335,7 @@ export default function ChatInterface() {
 
                 {isLoading && (
                   <motion.div
+                    key="loading"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex justify-start"
@@ -348,6 +397,7 @@ export default function ChatInterface() {
       <AnimatePresence>
         {showHistory && (
           <motion.div
+            key="history-sidebar"
             initial={{ x: 300, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 300, opacity: 0 }}
@@ -379,7 +429,11 @@ export default function ChatInterface() {
                     >
                       <p className="text-sm text-white font-medium truncate mb-1">{item.query}</p>
                       <p className="text-xs text-gray-400 truncate mb-2">{item.response}</p>
-                      <p className="text-xs text-blue-300">{item.timestamp.toLocaleDateString()}</p>
+                      <p className="text-xs text-blue-300">
+                        {item.timestamp instanceof Date
+                          ? item.timestamp.toLocaleDateString()
+                          : new Date(item.timestamp).toLocaleDateString()}
+                      </p>
                     </Card>
                   ))
                 )}

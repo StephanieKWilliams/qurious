@@ -7,7 +7,7 @@ import { Toaster } from "@/components/toaster"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "AI Chat App",
+  title: "Qurious",
   description: "Your Intelligent Conversation Partner",
 }
 

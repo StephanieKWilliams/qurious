@@ -1,5 +1,5 @@
 """
-FastAPI Backend for Groq AI Chat Application
+FastAPI Backend for Qurious Chat Application
 """
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Groq AI Chat API",
-    description="Backend API for Groq AI Chat Application with ultra-fast inference",
+    title=" Chat API",
+    description="Backend API for Qurious Chat Application with ultra-fast inference",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -105,7 +105,7 @@ async def chat_endpoint(
     _: bool = Depends(validate_api_key)
 ):
     """
-    Main chat endpoint that processes user messages and returns Groq AI responses
+    Main chat endpoint that processes user messages and returns Qurious responses
     """
     try:
         logger.info(f"Processing chat request: {request.message[:50]}...")
