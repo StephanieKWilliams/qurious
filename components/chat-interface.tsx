@@ -30,8 +30,15 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [queryHistory, setQueryHistory] = useState<QueryHistory[]>([])
-  const [backendUrl, setBackendUrl] = useState("http://localhost:8000")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [backendUrl, setBackendUrl] = useState(() => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!envUrl) {
+    console.warn("⚠️ NEXT_PUBLIC_API_URL is not set. Backend URL will be undefined.");
+  }
+  return envUrl || "";
+});
+
   const { toast } = useToast()
 
   const scrollToBottom = () => {
@@ -64,7 +71,10 @@ export default function ChatInterface() {
     }
 
     // Set backend URL from environment or default
-    const envBackendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+    const envBackendUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!envBackendUrl) {
+        throw new Error("Missing NEXT_PUBLIC_API_URL environment variable");
+      }
     setBackendUrl(envBackendUrl)
   }, [])
 
